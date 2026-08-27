@@ -1,0 +1,5 @@
+#!/bin/bash
+# Test fake: record argv and stdin so tests can assert on both.
+printf '%s\n' "$*" >"$FAKE_DIR/wl-copy.args"
+cat >"$FAKE_DIR/wl-copy.data"
+exit 0

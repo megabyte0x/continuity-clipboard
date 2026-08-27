@@ -1,0 +1,8 @@
+#!/bin/bash
+# Test fake driven by files under $FAKE_DIR: `types` lists mime types,
+# `content` holds the clipboard payload.
+case "${1:-}" in
+  --list-types) cat "$FAKE_DIR/types" 2>/dev/null || true ;;
+  *) cat "$FAKE_DIR/content" 2>/dev/null || true ;;
+esac
+exit 0

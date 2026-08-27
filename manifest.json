@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "megabyte.continuity-clipboard",
+  "name": "Continuity Clipboard",
+  "version": "1.4.3",
+  "author": "Megabyte",
+  "license": "MIT",
+  "description": "Copy on your iPhone, paste on your Omarchy desktop — and back. LAN clipboard bridge with one-tap iOS Shortcuts and QR pairing.",
+  "kinds": ["service", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Continuity Clipboard",
+    "description": "iPhone ↔ desktop clipboard bridge status and pairing",
+    "category": "Connectivity",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

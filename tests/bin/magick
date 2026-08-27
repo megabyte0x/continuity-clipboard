@@ -1,0 +1,5 @@
+#!/bin/bash
+# Test fake: pretend to convert any input image to PNG.
+cat >/dev/null
+printf '\x89PNG\r\n\x1a\nCONVERTED'
+exit 0

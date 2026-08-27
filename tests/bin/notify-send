@@ -1,0 +1,3 @@
+#!/bin/bash
+printf '%s\n' "$*" >>"$FAKE_DIR/notify-send.log"
+exit 0
