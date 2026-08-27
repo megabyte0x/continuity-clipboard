@@ -369,23 +369,7 @@ function copyText(value, button) {
 __ONE_TAP__
 
 <div class="card">
-  <b>&ldquo;Send to Omarchy&rdquo;</b> &mdash; easiest version (text &amp; links), one action:
-  <div class="valuerow"><code>__CLIP_URL__?token=__TOKEN__&amp;text=</code>
-    <button class="copy" onclick="copyText('__CLIP_URL__?token=__TOKEN__&text=', this)">Copy</button></div>
-  <ol>
-    <li>Action: <b>Get Contents of URL</b> &rarr; paste the URL above into the URL field</li>
-    <li>With the cursor at the very end (after <code>text=</code>), tap
-        <b>Clipboard</b> in the variable bar above the keyboard — it must
-        appear as a <b>blue pill</b>. Typing the word “Clipboard” sends the
-        word itself. Text only — for images use the full version below</li>
-  </ol>
-  <p class="dim">No Method, no Headers, no Request Body &mdash; the clipboard rides
-  the URL. Shortcuts encodes it automatically.</p>
-  <a class="button" href="shortcuts://create-shortcut">Open Shortcuts editor</a>
-</div>
-
-<div class="card">
-  <b>&ldquo;Send to Omarchy&rdquo;</b> &mdash; full version (also sends images):
+  <b>&ldquo;Send to Omarchy&rdquo;</b> &mdash; recommended version (any text &amp; images):
   <div class="valuerow"><code>__CLIP_URL__</code>
     <button class="copy" onclick="copyText('__CLIP_URL__', this)">Copy</button></div>
   <div class="valuerow"><code>__TOKEN__</code>
@@ -401,14 +385,37 @@ __ONE_TAP__
         <b>Select Variable</b> &rarr; pick <b>Clipboard</b> (the slot must show the
         blue Clipboard token, not stay empty)</li>
   </ol>
-  <p class="dim">Copied photos and screenshots arrive as HEIC &mdash; the desktop
-  converts them to PNG automatically, so they paste anywhere.</p>
+  <p class="dim">The clipboard rides the request <b>body</b>, so it survives spaces,
+  line breaks, and long text intact &mdash; use this for seed phrases, passwords,
+  code, and multi-line notes. Copied photos and screenshots arrive as HEIC and the
+  desktop converts them to PNG automatically, so they paste anywhere.</p>
+  <a class="button" href="shortcuts://create-shortcut">Open Shortcuts editor</a>
+</div>
+
+<div class="card">
+  <b>&ldquo;Send to Omarchy&rdquo;</b> &mdash; quick one-action version (short single-line text only):
+  <div class="valuerow"><code>__CLIP_URL__?token=__TOKEN__&amp;text=</code>
+    <button class="copy" onclick="copyText('__CLIP_URL__?token=__TOKEN__&text=', this)">Copy</button></div>
+  <ol>
+    <li>Action: <b>Get Contents of URL</b> &rarr; paste the URL above into the URL field</li>
+    <li>With the cursor at the very end (after <code>text=</code>), tap
+        <b>Clipboard</b> in the variable bar above the keyboard — it must
+        appear as a <b>blue pill</b>. Typing the word “Clipboard” sends the
+        word itself</li>
+  </ol>
+  <p class="dim">&#9888;&#65039; <b>Warning:</b> the clipboard rides the URL here, and
+  Shortcuts does <b>not</b> reliably percent-encode it. Any <b>space or line break</b>
+  truncates the URL &mdash; a 24-word seed phrase arrives as just its first word, and
+  multi-line text is cut at the first newline. Use this only for short single-line
+  values (a link, a code with no spaces). For anything else, use the recommended
+  POST version above.</p>
+  <a class="button" href="shortcuts://create-shortcut">Open Shortcuts editor</a>
 </div>
 
 <div class="card">
   <b>Bonus: send photos straight from the Share Sheet</b>
   <ol>
-    <li>Duplicate the full version; open its details (<b>&#9432;</b>) and enable
+    <li>Duplicate the recommended (POST) version; open its details (<b>&#9432;</b>) and enable
         <b>Show in Share Sheet</b> (accept Images and Text)</li>
     <li>Change Request Body &rarr; File to the <b>Shortcut Input</b> variable</li>
   </ol>
