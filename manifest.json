@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "continuity-clipboard",
   "name": "Continuity Clipboard",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "author": "Megabyte",
   "license": "MIT",
   "description": "Copy on your iPhone, paste on your Omarchy desktop — and back. LAN clipboard bridge with one-tap iOS Shortcuts and QR pairing.",

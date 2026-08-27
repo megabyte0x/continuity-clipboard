@@ -28,6 +28,35 @@ class SniffMimeTest(unittest.TestCase):
         self.assertEqual(clipbridged.sniff_mime(b"MM\x00*restoftiff"), "image/tiff")
 
 
+class PairingHostTest(unittest.TestCase):
+    def test_override_wins(self):
+        self.assertEqual(clipbridged.pairing_host("100.87.56.118"), "100.87.56.118")
+
+    def test_falls_back_to_lan_when_no_mdns(self):
+        real = clipbridged.mdns_host
+        clipbridged.mdns_host = lambda: None
+        try:
+            self.assertEqual(clipbridged.pairing_host(), clipbridged.lan_host())
+        finally:
+            clipbridged.mdns_host = real
+
+    def test_prefers_mdns_over_lan(self):
+        real = clipbridged.mdns_host
+        clipbridged.mdns_host = lambda: "box.local"
+        try:
+            self.assertEqual(clipbridged.pairing_host(), "box.local")
+        finally:
+            clipbridged.mdns_host = real
+
+    def test_mdns_host_rejects_unresolvable(self):
+        real = clipbridged.socket.getaddrinfo
+        clipbridged.socket.getaddrinfo = lambda *a, **k: (_ for _ in ()).throw(OSError())
+        try:
+            self.assertIsNone(clipbridged.mdns_host())
+        finally:
+            clipbridged.socket.getaddrinfo = real
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None

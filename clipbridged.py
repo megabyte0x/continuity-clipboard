@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 APP = "continuity-clipboard"
-VERSION = "1.4.3"
+VERSION = "1.5.0"
 DEFAULT_PORT = 8737
 MAX_BODY_BYTES = 10 * 1024 * 1024
 PREVIEW_CHARS = 80
@@ -70,6 +70,40 @@ def lan_host():
             return probe.getsockname()[0]
     except OSError:
         return "127.0.0.1"
+
+
+def mdns_host():
+    """Stable `<hostname>.local` name if it actually resolves, else None.
+
+    A Bonjour/mDNS name survives DHCP address changes (new Wi-Fi network, lease
+    renewal), so pairing does not break when the LAN IP moves. We only return it
+    when the local resolver can turn it into an address, which on Linux means
+    avahi/nss-mdns is present and the name is being advertised; iOS resolves the
+    same name natively over Bonjour on the shared LAN.
+    """
+    try:
+        name = socket.gethostname().split(".")[0]
+    except OSError:
+        return None
+    if not name or name.lower() == "localhost":
+        return None
+    fqdn = name + ".local"
+    try:
+        socket.getaddrinfo(fqdn, None)
+    except OSError:
+        return None
+    return fqdn
+
+
+def pairing_host(override=None):
+    """Host to embed in the pairing URL / QR.
+
+    Priority: explicit override (arg/env, e.g. a Tailscale IP or custom name),
+    then a resolvable mDNS `.local` name, then the raw routed LAN IP.
+    """
+    if override:
+        return override
+    return mdns_host() or lan_host()
 
 
 def preview_for(mime, data):
@@ -167,11 +201,17 @@ def normalize_image(mime, data):
 class Bridge:
     """Daemon state plus the wl-clipboard boundary."""
 
-    def __init__(self, state_dir, port):
+    def __init__(self, state_dir, port, host_override=None):
         self.state_dir = state_dir
         self.port = port
         self.token = load_or_create_token(os.path.join(state_dir, "token"))
+        self.host_override = host_override
+        # Resolve the stable pairing name once: the override and the mDNS
+        # `<hostname>.local` are constant, and mDNS resolution is a network
+        # lookup we must not repeat on the per-clip hot path below.
+        self._stable_host = host_override or mdns_host()
         self.host = lan_host()
+        self.pair_host = self._stable_host or self.host
         self.started_at = datetime.now().isoformat(timespec="seconds")
         self.received = 0
         self.served = 0
@@ -185,6 +225,7 @@ class Bridge:
             "version": VERSION,
             "pid": os.getpid(),
             "host": self.host,
+            "pair_host": self.pair_host,
             "port": self.port,
             "started_at": self.started_at,
             "received": self.received,
@@ -210,6 +251,8 @@ class Bridge:
                 "at": datetime.now().strftime("%H:%M"),
             }
             self.host = lan_host()
+            # Stable host is cached; only the IP fallback can move between clips.
+            self.pair_host = self._stable_host or self.host
             self.write_status()
 
     # -- Wayland clipboard ---------------------------------------------
@@ -633,7 +676,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _setup_page(self):
         bridge = self.bridge
-        base = f"http://{bridge.host}:{bridge.port}"
+        base = f"http://{bridge.pair_host}:{bridge.port}"
         links = load_shortcut_links(bridge.state_dir)
         if "send" in links and "get" in links:
             one_tap = (
@@ -656,7 +699,7 @@ class Handler(BaseHTTPRequestHandler):
                 ' (signed by Apple when you share) is the only one-tap channel. See the README.</p>')
         page = (SETUP_PAGE
                 .replace("__ONE_TAP__", one_tap)
-                .replace("__HOST__", bridge.host)
+                .replace("__HOST__", bridge.pair_host)
                 .replace("__PORT__", str(bridge.port))
                 .replace("__TOKEN__", bridge.token)
                 .replace("__CLIP_URL__", base + "/clip"))
@@ -668,6 +711,9 @@ def main(argv=None):
     parser.add_argument("--port", type=int,
                         default=int(os.environ.get("OMARCHY_CONTINUITY_CLIP_PORT") or DEFAULT_PORT))
     parser.add_argument("--bind", default="0.0.0.0")
+    parser.add_argument("--host", default=os.environ.get("OMARCHY_CONTINUITY_CLIP_HOST") or None,
+                        help="Override the pairing host (e.g. a Tailscale IP or custom name). "
+                             "Default: a resolvable <hostname>.local, else the routed LAN IP.")
     parser.add_argument("--state-dir", default=default_state_dir())
     args = parser.parse_args(argv)
 
@@ -678,7 +724,7 @@ def main(argv=None):
         log(f"could not bind {args.bind}:{args.port}: {error}")
         return 1
     server.daemon_threads = True
-    server.bridge = Bridge(args.state_dir, server.server_address[1])
+    server.bridge = Bridge(args.state_dir, server.server_address[1], host_override=args.host)
     server.bridge.write_status()
     log(f"listening on {args.bind}:{server.bridge.port} (state: {args.state_dir})")
 

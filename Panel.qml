@@ -38,7 +38,11 @@ Panel {
   property bool pendingQr: false
   property bool linkCopied: false
 
-  readonly property string host: status && status.host ? String(status.host) : ""
+  // Prefer the stable mDNS `<hostname>.local` pairing host when the daemon
+  // reports one; it survives Wi-Fi/DHCP address changes. Fall back to the raw
+  // LAN IP for older daemons or when mDNS is unavailable.
+  readonly property string host: status && status.pair_host ? String(status.pair_host)
+    : (status && status.host ? String(status.host) : "")
   readonly property string pairUrl: host !== "" && token !== ""
     ? Model.setupUrl(host, bridgePort, token)
     : ""

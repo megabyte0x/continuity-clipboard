@@ -34,7 +34,8 @@ function clipUrl(host, port) {
 // One-line bridge state for the panel header.
 function statusLine(status, daemonRunning) {
   if (!daemonRunning) return "Bridge not running"
-  if (status && status.host && status.port) return baseUrl(status.host, status.port)
+  var host = status && status.pair_host ? status.pair_host : (status && status.host)
+  if (host && status.port) return baseUrl(host, status.port)
   return "Bridge starting…"
 }
 

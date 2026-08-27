@@ -140,10 +140,35 @@ any phone browser.
 The bar panel shows the bridge address, the last synced clip, and buttons to
 copy the pairing link, restart the bridge, and regenerate the token.
 
+## Stable pairing across networks
+
+The pairing URL and QR prefer a stable **mDNS `<hostname>.local`** name (e.g.
+`http://haprocrates.local:8737/...`) whenever it resolves, instead of a raw
+DHCP-assigned IP. That means switching Wi-Fi networks or renewing a lease no
+longer breaks your shortcuts — the phone resolves the same Bonjour name on the
+new network. iOS resolves `.local` natively; on the desktop it needs `avahi`
+(shipped with Omarchy).
+
+If mDNS is unavailable the bridge falls back to the routed LAN IP. To pin an
+explicit address — for example a **Tailscale IP**, which is stable on *any*
+network, even away from home — set `OMARCHY_CONTINUITY_CLIP_HOST`:
+
+```bash
+OMARCHY_CONTINUITY_CLIP_HOST=100.87.56.118   # your tailnet IP
+```
+
+The bridge always binds `0.0.0.0`, so it is reachable over LAN, mDNS, and
+Tailscale simultaneously; this setting only chooses which address the QR
+encodes. After changing it, restart the bridge from the panel and re-scan the
+QR (the token is unchanged).
+
 ## Configuration
 
 - `OMARCHY_CONTINUITY_CLIP_PORT` — bridge port (default `8737`). Set it in
   your session environment before the shell starts.
+- `OMARCHY_CONTINUITY_CLIP_HOST` — override the pairing host embedded in the
+  QR / setup URL (default: a resolvable `<hostname>.local`, else the LAN IP).
+  Equivalent CLI flag: `--host`.
 
 ## Security model
 
