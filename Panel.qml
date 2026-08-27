@@ -13,14 +13,14 @@ import "Model.js" as Model
 // anchor against.
 Panel {
   id: root
-  moduleName: "ios-clipboard"
+  moduleName: "continuity-clipboard"
   manageIpc: false
 
   property var anchorItem: null
   property var hostWidget: null
 
   readonly property var bridgeService: bar && bar.shell && typeof bar.shell.serviceFor === "function"
-    ? bar.shell.serviceFor("ios-clipboard")
+    ? bar.shell.serviceFor("continuity-clipboard")
     : null
   readonly property bool bridgeRunning: bridgeService ? bridgeService.daemonRunning === true : false
   readonly property int bridgePort: bridgeService && bridgeService.port ? bridgeService.port : 8737

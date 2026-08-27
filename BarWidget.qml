@@ -6,10 +6,10 @@ import qs.Ui
 // the bridge daemon is down, and hosts the pairing/status panel.
 BarWidget {
   id: root
-  moduleName: "ios-clipboard"
+  moduleName: "continuity-clipboard"
 
   readonly property var bridgeService: bar && bar.shell && typeof bar.shell.serviceFor === "function"
-    ? bar.shell.serviceFor("ios-clipboard")
+    ? bar.shell.serviceFor("continuity-clipboard")
     : null
   readonly property bool bridgeRunning: bridgeService ? bridgeService.daemonRunning === true : false
 
