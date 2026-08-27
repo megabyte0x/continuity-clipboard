@@ -52,13 +52,13 @@ switch. The `/setup` page walks through each one.
 ## Install
 
 ```sh
-omarchy plugin add https://github.com/megabyte/omarchy-continuity-clipboard.git --enable
+omarchy plugin add https://github.com/megabyte0x/ios-clipboard.git --enable
 ```
 
 Or by hand: copy this folder to
-`~/.config/omarchy/plugins/megabyte.continuity-clipboard/`, then
+`~/.config/omarchy/plugins/ios-clipboard/`, then
 `omarchy-shell shell rescanPlugins` and
-`omarchy plugin enable megabyte.continuity-clipboard`.
+`omarchy plugin enable ios-clipboard`.
 
 The bar gains a 󰄜 widget and the bridge daemon starts immediately.
 
@@ -176,7 +176,7 @@ formats pass through unconverted).
 ## Remove
 
 ```sh
-omarchy plugin remove megabyte.continuity-clipboard
+omarchy plugin remove ios-clipboard
 ```
 
 Disabling or removing the plugin stops the bridge daemon with it.
