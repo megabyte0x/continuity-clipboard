@@ -49,6 +49,12 @@ Panel {
   readonly property string headline: Model.statusLine(status, bridgeRunning)
   readonly property string pairing: Model.pairingLine(status)
 
+  // Panel content sits on the opaque popup surface, so it must track the THEME
+  // foreground (bar.foreground / Color.bar.text) -- never bar.barForeground,
+  // which is the wallpaper-contrast color a transparent bar computes via
+  // omarchy-bar-text-color. Over a light wallpaper that flips to the dark
+  // contrast color and renders this whole card invisible. barForeground is for
+  // bar chrome only (see BarWidget.qml).
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -157,7 +163,7 @@ Panel {
         Text {
           width: parent.width
           text: "Continuity Clipboard"
-          color: root.barForeground
+          color: root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.subtitle
           font.bold: true
@@ -166,7 +172,7 @@ Panel {
         Text {
           width: parent.width
           text: root.headline
-          color: root.bridgeRunning ? root.barForeground : "#ff6b6b"
+          color: root.bridgeRunning ? root.contentForeground : Color.urgent
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.bodySmall
           wrapMode: Text.WrapAnywhere
@@ -181,6 +187,9 @@ Panel {
           visible: root.qrSize > 0
           width: root.qrSize * moduleSize
           height: width
+          // Deliberately NOT themed: a QR code is scanned by a camera, not read
+          // by a human, and phone decoders expect dark-on-light with a quiet
+          // zone. Theming this (or inverting it on a dark theme) breaks pairing.
           color: "white"
           radius: Style.cornerRadius
           anchors.horizontalCenter: parent.horizontalCenter
@@ -209,7 +218,7 @@ Panel {
           width: parent.width
           visible: root.qrSize > 0
           text: "Scan with the iPhone camera to pair"
-          color: root.barForeground
+          color: root.contentForeground
           opacity: 0.6
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.bodySmall
@@ -220,7 +229,7 @@ Panel {
           width: parent.width
           visible: root.qrSize === 0
           text: root.bridgeRunning ? "Preparing pairing code…" : "Start the bridge to pair an iPhone"
-          color: root.barForeground
+          color: root.contentForeground
           opacity: 0.6
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.bodySmall
@@ -230,7 +239,7 @@ Panel {
         Text {
           width: parent.width
           text: root.linkCopied ? "Pairing link copied" : root.pairing
-          color: root.barForeground
+          color: root.contentForeground
           opacity: root.linkCopied ? 1 : 0.75
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.bodySmall
@@ -263,7 +272,7 @@ Panel {
             iconText: "󰌆"
             tooltipText: "Regenerate token (re-pair phones)"
             foreground: root.contentForeground
-            hoverColor: "#ff6b6b"
+            hoverColor: Color.urgent
             fontFamily: root.contentFontFamily
             enabled: root.bridgeService !== null
             onClicked: root.bridgeService.regenerateToken()
