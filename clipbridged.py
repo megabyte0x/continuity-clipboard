@@ -230,6 +230,54 @@ def bind_server(bind_host, port, attempts=10, delay=0.3):
     return None, last
 
 
+def paired_marker_path(state_dir):
+    return os.path.join(state_dir, "paired.json")
+
+
+def load_paired_at(state_dir):
+    """ISO timestamp of the first completed transfer, or None when unpaired."""
+    try:
+        with open(paired_marker_path(state_dir), encoding="utf-8") as handle:
+            value = json.load(handle).get("paired_at")
+        return str(value) if value else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def save_paired_at(state_dir):
+    """Record the pairing once, so it survives daemon restarts. Returns the stamp."""
+    stamp = datetime.now().isoformat(timespec="seconds")
+    path = paired_marker_path(state_dir)
+    temp = path + ".tmp"
+    try:
+        with open(temp, "w", encoding="utf-8") as handle:
+            json.dump({"paired_at": stamp}, handle)
+        os.replace(temp, path)
+    except OSError as error:
+        log(f"could not persist pairing state: {error}")
+    return stamp
+
+
+def adopt_prior_pairing(state_dir):
+    """Backfill the marker for phones paired before it existed.
+
+    Upgrading users have a working phone shortcut but no paired.json, and the
+    counters start at zero, so without this the panel would report "Not paired
+    yet" until the next clip. A status.json showing past traffic is proof enough.
+    """
+    try:
+        with open(os.path.join(state_dir, "status.json"), encoding="utf-8") as handle:
+            status = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(status, dict):
+        return None
+    traffic = (status.get("received") or 0) + (status.get("served") or 0)
+    if traffic <= 0 and not status.get("last_event"):
+        return None
+    return save_paired_at(state_dir)
+
+
 def load_or_create_token(path):
     """Return the shared secret, minting one with owner-only permissions on first run."""
     try:
@@ -401,6 +449,10 @@ class Bridge:
         self.received = 0
         self.served = 0
         self.last_event = None
+        # Pairing is a property of the phone, not of this process: the counters
+        # above reset on every restart, so the fact that a phone has completed a
+        # transfer lives in the state dir instead.
+        self.paired_at = load_paired_at(state_dir) or adopt_prior_pairing(state_dir)
         self._lock = threading.Lock()
 
     def write_status(self):
@@ -415,6 +467,8 @@ class Bridge:
             "started_at": self.started_at,
             "received": self.received,
             "served": self.served,
+            "paired": self.paired_at is not None,
+            "paired_at": self.paired_at,
             "last_event": self.last_event,
         }
         path = os.path.join(self.state_dir, "status.json")
@@ -435,6 +489,8 @@ class Bridge:
                 "preview": preview_for(mime, data),
                 "at": datetime.now().strftime("%H:%M"),
             }
+            if self.paired_at is None:
+                self.paired_at = save_paired_at(self.state_dir)
             self.host = lan_host()
             # Stable host is cached; only the IP fallback can move between clips.
             self.pair_host = self._stable_host or self.host

@@ -359,6 +359,32 @@ class BridgeServerTest(unittest.TestCase):
         self.assertEqual(status["last_event"]["direction"], "desktop-to-phone")
         self.assertIn("payload", status["last_event"]["preview"])
 
+    def test_pairing_is_recorded_on_first_transfer(self):
+        with open(os.path.join(self.state_dir, "status.json")) as handle:
+            self.assertFalse(json.load(handle)["paired"])
+        self.set_clip(["text/plain"], b"payload")
+        self.request("/clip", headers=self.auth())
+        with open(os.path.join(self.state_dir, "status.json")) as handle:
+            status = json.load(handle)
+        self.assertTrue(status["paired"])
+        self.assertTrue(status["paired_at"])
+        self.assertTrue(os.path.exists(os.path.join(self.state_dir, "paired.json")))
+
+    def test_pairing_survives_a_daemon_restart(self):
+        # The counters reset with the process; the pairing marker must not, or
+        # the panel would claim "Not paired yet" after every shell restart.
+        self.set_clip(["text/plain"], b"payload")
+        self.request("/clip", headers=self.auth())
+        first = clipbridged.load_paired_at(self.state_dir)
+        restarted = clipbridged.Bridge(self.state_dir, self.server.server_address[1])
+        restarted.write_status()
+        with open(os.path.join(self.state_dir, "status.json")) as handle:
+            status = json.load(handle)
+        self.assertEqual(restarted.received, 0)
+        self.assertEqual(restarted.served, 0)
+        self.assertTrue(status["paired"])
+        self.assertEqual(status["paired_at"], first)
+
     # -- pages -----------------------------------------------------------
 
     def test_setup_page_contains_pairing_urls(self):

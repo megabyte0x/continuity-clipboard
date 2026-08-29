@@ -43,14 +43,17 @@ test("statusLine shows starting while running without status", () => {
   assert.equal(Model.statusLine(null, true), "Bridge starting…")
 })
 
-test("eventLine has a friendly empty state", () => {
-  assert.equal(Model.eventLine(null), "No clips synced yet")
-  assert.equal(Model.eventLine({}), "No clips synced yet")
+test("pairingLine reports the unpaired state", () => {
+  assert.equal(Model.pairingLine(null), "Not paired yet")
+  assert.equal(Model.pairingLine({}), "Not paired yet")
+  assert.equal(Model.pairingLine({ paired: false }), "Not paired yet")
 })
 
-test("eventLine formats direction, preview, and time", () => {
-  const line = Model.eventLine({ last_event: { direction: "phone-to-desktop", preview: '"Hi"', at: "20:31" } })
-  assert.equal(line, 'iPhone → desktop: "Hi"  ·  20:31')
-  const out = Model.eventLine({ last_event: { direction: "desktop-to-phone", preview: '"Yo"', at: "20:32" } })
-  assert.equal(out, 'desktop → iPhone: "Yo"  ·  20:32')
+test("pairingLine reports pairing without leaking clip contents", () => {
+  const status = {
+    paired: true,
+    paired_at: "2026-08-29T19:54:00",
+    last_event: { direction: "phone-to-desktop", preview: '"hunter2"', at: "19:54" }
+  }
+  assert.equal(Model.pairingLine(status), "Paired")
 })

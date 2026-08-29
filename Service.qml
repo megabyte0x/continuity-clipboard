@@ -57,7 +57,9 @@ Item {
   // token on boot. Existing phone shortcuts stop working until re-paired --
   // that is the point of regenerating.
   function regenerateToken() {
-    Quickshell.execDetached(["rm", "-f", stateDir + "/token"])
+    // The old phone shortcut stops working, so the bridge is unpaired again --
+    // clear the marker too or the panel keeps claiming "Paired".
+    Quickshell.execDetached(["rm", "-f", stateDir + "/token", stateDir + "/paired.json"])
     regenTimer.restart()
   }
 

@@ -47,7 +47,7 @@ Panel {
     ? Model.setupUrl(host, bridgePort, token)
     : ""
   readonly property string headline: Model.statusLine(status, bridgeRunning)
-  readonly property string lastSync: Model.eventLine(status)
+  readonly property string pairing: Model.pairingLine(status)
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -229,7 +229,7 @@ Panel {
 
         Text {
           width: parent.width
-          text: root.linkCopied ? "Pairing link copied" : root.lastSync
+          text: root.linkCopied ? "Pairing link copied" : root.pairing
           color: root.barForeground
           opacity: root.linkCopied ? 1 : 0.75
           font.family: root.contentFontFamily

@@ -39,13 +39,12 @@ function statusLine(status, daemonRunning) {
   return "Bridge starting…"
 }
 
-// One-line description of the last synced clip, or a friendly empty state.
-function eventLine(status) {
-  var event = status && status.last_event ? status.last_event : null
-  if (!event || !event.preview) return "No clips synced yet"
-  var arrow = event.direction === "phone-to-desktop" ? "iPhone → desktop" : "desktop → iPhone"
-  var at = event.at ? "  ·  " + event.at : ""
-  return arrow + ": " + event.preview + at
+// Pairing state for the panel. Deliberately says nothing about what was
+// synced: the panel sits on a shared screen, and clip previews put clipboard
+// contents (passwords, tokens, private messages) on it every time a clip moves.
+// `paired` is persisted by the daemon, so it survives restarts.
+function pairingLine(status) {
+  return status && status.paired ? "Paired" : "Not paired yet"
 }
 
 if (typeof module !== "undefined") {
@@ -55,6 +54,6 @@ if (typeof module !== "undefined") {
     setupUrl: setupUrl,
     clipUrl: clipUrl,
     statusLine: statusLine,
-    eventLine: eventLine
+    pairingLine: pairingLine
   }
 }
