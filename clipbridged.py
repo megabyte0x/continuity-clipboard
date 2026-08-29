@@ -14,6 +14,8 @@ Routes:
 """
 
 import argparse
+import errno
+import fcntl
 import hmac
 import json
 import os
@@ -23,11 +25,13 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 APP = "continuity-clipboard"
+SCRIPT_NAME = os.path.basename(__file__)
 VERSION = "1.5.0"
 DEFAULT_PORT = 8737
 MAX_BODY_BYTES = 10 * 1024 * 1024
@@ -43,6 +47,187 @@ def log(message):
 def default_state_dir():
     base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
     return os.path.join(base, "omarchy", APP)
+
+
+def process_command(pid):
+    """argv of `pid` as a list, or [] when it is gone / not ours to read."""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as handle:
+            return [part.decode("utf-8", "replace") for part in handle.read().split(b"\0") if part]
+    except OSError:
+        return []
+
+
+def is_sibling_daemon(pid):
+    """True when `pid` is another running copy of this daemon.
+
+    Deliberately strict: the match is `python* clipbridged.py ...` (or a direct
+    shebang exec), never "any process whose command line mentions the script".
+    A loose substring test also matches the shell, editor, tail, or grep a user
+    happens to be running against this file -- and this predicate gates SIGKILL.
+    """
+    if pid <= 0 or pid == os.getpid():
+        return False
+    argv = process_command(pid)
+    if not argv:
+        return False
+    program = os.path.basename(argv[0])
+    if program == SCRIPT_NAME:
+        return True
+    if not program.startswith("python"):
+        return False
+    for arg in argv[1:]:
+        if arg.startswith("-"):
+            continue
+        return os.path.basename(arg) == SCRIPT_NAME
+    return False
+
+
+def claim_singleton(state_dir, timeout=6.0):
+    """Take the daemon's exclusive lock, reclaiming it from an orphan if needed.
+
+    One machine runs one bridge. When the shell that supervised the previous
+    daemon dies without reaping it (SIGKILL, crash, `omarchy-restart-shell`),
+    that daemon is reparented to init and keeps the port -- so every daemon the
+    new shell starts died on bind and the supervisor retried forever. The lock
+    is an fcntl advisory lock held on an open descriptor, so the kernel drops it
+    the instant the holder exits by any means: no stale-pidfile heuristics.
+
+    Returns the held descriptor (keep it alive for the process lifetime), or
+    None when a live sibling refuses to yield.
+    """
+    path = os.path.join(state_dir, "daemon.lock")
+    handle = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+
+    def try_lock():
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError as error:
+            if error.errno not in (errno.EACCES, errno.EAGAIN):
+                raise
+            return False
+
+    if not try_lock():
+        try:
+            holder = int(os.pread(handle, 32, 0).decode("utf-8", "replace").strip() or 0)
+        except ValueError:
+            holder = 0
+        if not is_sibling_daemon(holder):
+            # Lock held by something we cannot identify as ours: never signal it.
+            log(f"another process (pid {holder or 'unknown'}) holds {path}; not starting")
+            os.close(handle)
+            return None
+        if not is_orphaned(holder):
+            # Same rule as the sweep below: a daemon with a live supervisor is
+            # not ours to reclaim, or the two shells trade kills forever.
+            log(f"another shell already supervises the bridge (pid {holder}); not starting")
+            os.close(handle)
+            return None
+        log(f"reclaiming the bridge from orphaned daemon pid {holder}")
+        for signal_number in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.kill(holder, signal_number)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                log(f"cannot signal pid {holder}; not starting")
+                os.close(handle)
+                return None
+            deadline = time.monotonic() + (timeout if signal_number == signal.SIGTERM else 2.0)
+            while time.monotonic() < deadline:
+                if try_lock():
+                    os.ftruncate(handle, 0)
+                    os.pwrite(handle, f"{os.getpid()}\n".encode("utf-8"), 0)
+                    return handle
+                time.sleep(0.1)
+        log(f"orphaned daemon pid {holder} would not exit; not starting")
+        os.close(handle)
+        return None
+
+    os.ftruncate(handle, 0)
+    os.pwrite(handle, f"{os.getpid()}\n".encode("utf-8"), 0)
+    return handle
+
+
+def parent_pid(pid):
+    """ppid from /proc/<pid>/stat, reading past a comm field that may contain ')'."""
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as handle:
+            fields = handle.read().rpartition(")")[2].split()
+        return int(fields[1])
+    except (OSError, IndexError, ValueError):
+        return 0
+
+
+def is_orphaned(pid):
+    """True when `pid` lost its supervisor and was reparented to init/systemd.
+
+    This daemon is only ever started by the shell plugin, so a live non-reaper
+    parent means another running shell still owns that daemon. Reclaiming it
+    would make the two supervisors kill each other's daemon forever; leaving it
+    alone keeps 'newest shell wins' from becoming a restart loop.
+    """
+    ppid = parent_pid(pid)
+    if ppid <= 1:
+        return True
+    parent_argv = process_command(ppid)
+    return bool(parent_argv) and os.path.basename(parent_argv[0]) == "systemd"
+
+
+def terminate_sibling_daemons(timeout=6.0):
+    """Stop orphaned copies of this daemon left behind by a dead shell.
+
+    The lock above is authoritative for daemons that know about it, but an
+    orphan started by an older build holds no lock -- it only holds the port.
+    Processes we cannot signal (another user's) raise PermissionError and are
+    skipped rather than killed.
+
+    Returns False when a sibling is still supervised by a live shell, which the
+    caller treats as fatal instead of starting a kill war over the port.
+    """
+    victims = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        if not is_sibling_daemon(pid):
+            continue
+        if not is_orphaned(pid):
+            log(f"another shell already supervises the bridge (pid {pid}); not starting")
+            return False
+        victims.append(pid)
+    for pid in victims:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            log(f"stopped a previous bridge daemon (pid {pid})")
+        except (ProcessLookupError, PermissionError):
+            continue
+    deadline = time.monotonic() + timeout
+    while victims and time.monotonic() < deadline:
+        victims = [pid for pid in victims if is_sibling_daemon(pid)]
+        if victims:
+            time.sleep(0.1)
+    for pid in victims:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            continue
+    return True
+
+
+def bind_server(bind_host, port, attempts=10, delay=0.3):
+    """Bind with short retries: a just-killed orphan's socket takes a beat to close."""
+    last = None
+    for attempt in range(attempts):
+        try:
+            return ThreadingHTTPServer((bind_host, port), Handler), None
+        except OSError as error:
+            last = error
+            if error.errno != errno.EADDRINUSE:
+                break
+            time.sleep(delay)
+    return None, last
 
 
 def load_or_create_token(path):
@@ -725,11 +910,21 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     os.makedirs(args.state_dir, exist_ok=True)
-    try:
-        server = ThreadingHTTPServer((args.bind, args.port), Handler)
-    except OSError as error:
+
+    # Exit code 3 means "do not retry": the bridge is owned by a process this
+    # daemon must not kill, so restarting cannot help. Service.qml treats it as
+    # fatal instead of looping on a port it will never win.
+    lock = claim_singleton(args.state_dir)
+    if lock is None:
+        return 3
+
+    if not terminate_sibling_daemons():
+        return 3
+
+    server, error = bind_server(args.bind, args.port)
+    if server is None:
         log(f"could not bind {args.bind}:{args.port}: {error}")
-        return 1
+        return 3 if isinstance(error, OSError) and error.errno == errno.EADDRINUSE else 1
     server.daemon_threads = True
     server.bridge = Bridge(args.state_dir, server.server_address[1], host_override=args.host)
     server.bridge.write_status()

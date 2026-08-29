@@ -36,8 +36,14 @@ Item {
   property bool shuttingDown: false
   property int rapidRestarts: 0
 
+  // Set when the daemon reports an unwinnable environment (exit 3: the port is
+  // held by a process it must not kill). Restarting cannot clear that, so the
+  // supervisor stays down instead of logging a bind failure every 2 seconds.
+  property bool daemonBlocked: false
+
   function restartDaemon() {
     rapidRestarts = 0
+    daemonBlocked = false
     restartTimer.stop()
     if (daemon.running) {
       restartPending = true
@@ -63,7 +69,16 @@ Item {
     }
     onStarted: uptimeTimer.restart()
     onExited: function(exitCode) {
+      // A daemon that exited is not "up": leaving the uptime timer armed would
+      // zero rapidRestarts 60s later and drop a permanently failing daemon back
+      // into 2s retries forever, defeating the backoff below.
+      uptimeTimer.stop()
       if (root.shuttingDown) return
+      if (exitCode === 3) {
+        root.daemonBlocked = true
+        console.log("continuity-clipboard: bridge port unavailable; supervisor idle until the plugin is reloaded")
+        return
+      }
       if (root.restartPending) {
         root.restartPending = false
         restartTimer.interval = 500
